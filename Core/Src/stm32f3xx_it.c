@@ -40,6 +40,7 @@
 #define boardRows 20
 #define boardColumns 4
 #define jumpOnBlock 7
+#define jumpOnCoil 20
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -66,6 +67,10 @@ int SProbBase;
 int VProbBase;
 int LProbBase;
 int MProbBase;
+
+int monsterCount;
+int monsterLoc[50][2];
+char monsterState[50];
 
 GPIO_TypeDef *const Row_ports[] = {GPIOD, GPIOD, GPIOD, GPIOD};
 const uint16_t Row_pins[] = {GPIO_PIN_4, GPIO_PIN_5, GPIO_PIN_6, GPIO_PIN_7};
@@ -362,11 +367,39 @@ int getRandom(int lower, int upper)
 void processTurn()
 {
 	int i, j;
-
+	/*
+	 * board
+	 * 	'e': empty
+	 * 	'b': simple block
+	 * 	's': spoil or coil block
+	 * 	'v': void
+	 *  'l': loose block
+	 *  'm': monster
+	 *  '!': null and not valid
+	 */
 	// Shift screen to down
 	if (playerHeightInScreen > 12) {
 		playerHeightInScreen --;
 		playerRow --;
+
+		// delete old monsters states
+		for (i = 0; i < boardColumns; i ++) {
+			if (board[i][0] == 'm') {
+				// shift monster array to left
+				for (i = 0; i < monsterCount - 1; i ++ ) {
+					monsterLoc[i][0] = monsterLoc[i + 1][0];
+					monsterLoc[i][1] = monsterLoc[i + 1][1];
+				}
+				for (i = 0; i < monsterCount - 1; i ++ ) {
+					monsterState[i] = monsterState[i + 1];
+				}
+				monsterCount --;
+			}
+		}
+		for (i = 0; i < monsterCount; i ++ ) {
+			monsterLoc[i][1] --;
+		}
+
 		for (j = 0; j < boardRows - 1; j ++ ) {
 			// replace row[j] with row[j + 1]
 			for (i = 0; i < boardColumns; i ++ ) {
@@ -378,9 +411,47 @@ void processTurn()
 		}
 		setRowObjects(boardRows - 1);
 	}
+	// Void
+	if (board[playerCol][playerRow] == 'v') {
+		// Die
+	}
+	// Loose Block
+	if (playerRow > 0 && board[playerCol][playerRow - 1] == 'l') {
+		board[playerCol][playerRow - 1] = 'e';
+	}
 
+	// Monster
+	if (playerRow > 0 && board[playerCol][playerRow] == 'm') {
+		// Die
+	}
+
+    // Move monsters
+	for (i = 0; i < monsterCount; i ++ ) {
+		if (i ==0)
+			HAL_GPIO_TogglePin(GPIOE, GPIO_PIN_11);
+		if (monsterState[i] == 'l') {
+			if (monsterLoc[i][0] > 0 && board[monsterLoc[i][0] - 1][monsterLoc[i][1]] == 'e') {
+				board[monsterLoc[i][0] - 1][monsterLoc[i][1]] = 'm';
+				board[monsterLoc[i][0]][monsterLoc[i][1]] = 'e';
+				monsterLoc[i][0] --;
+			} else{
+				monsterState[i] = 'r';
+			}
+		} else {
+			if (monsterLoc[i][0] < boardColumns - 1 && board[monsterLoc[i][0] + 1][monsterLoc[i][1]] == 'e') {
+				board[monsterLoc[i][0] + 1][monsterLoc[i][1]] = 'm';
+				board[monsterLoc[i][0]][monsterLoc[i][1]] = 'e';
+				monsterLoc[i][0] ++;
+			} else {
+				monsterState[i] = 'l';
+			}
+
+		}
+	}
+
+    //	Jump and Gravity
 	if (playerRow == 0) {
-
+		// Die
 	} else if (jumpCount == 0 && playerRow > 0) { // Jump rule
 		// Gravity rule
 		if (board[playerCol][playerRow - 1] == 'e') {
@@ -390,6 +461,10 @@ void processTurn()
 
 		if (board[playerCol][playerRow - 1] == 'b') { // Jump on simple block
 			jumpCount = jumpOnBlock;
+		}
+
+		if (board[playerCol][playerRow - 1] == 's') { // Jump on simple block
+			jumpCount = jumpOnCoil;
 		}
 
 	} else if (jumpCount > 0) { // Go up rule
@@ -475,8 +550,15 @@ char chooseWhichObject()
 	}
 
 	if (score > 20) {
-		int MProb = MProbBase + MProbBase / (sqrt(score)); // as score goes high it will be so hard
-		if (getRandom(0, 100) < MProb) {
+		int MProb = MProbBase + MProbBase * (sqrt(score)); // as score goes high it will be so hard
+		if (MProb > 2 * MProbBase)
+			MProb = 2 * MProbBase;
+		int t = getRandom(0, 100);
+
+		if (t < MProb) {
+			  char buff[20];
+			  sprintf(buff, "%d", t);
+			  print(buff);
 			return 'm';
 		}
 	}
@@ -487,7 +569,9 @@ char chooseWhichObject()
 	}
 
 	if (score > 20) {
-		int VProb = VProbBase + VProbBase / (sqrt(score)); // as score goes high it will be so hard
+		int VProb = VProbBase + VProbBase * (sqrt(score)); // as score goes high it will be so hard
+		if (VProb > 2 * VProbBase)
+			VProb = 2 * VProb;
 		if (getRandom(0, 100) < VProb) {
 			return 'v';
 		}
@@ -508,6 +592,16 @@ void setRowObjects(int j)
 	for (i = 0; i < boardColumns; i ++ ) {
 		char chosen = chooseWhichObject();
 		if (chosen != 'e') {
+			if (chosen == 'm') {
+				monsterLoc[monsterCount][0] = i;
+				monsterLoc[monsterCount][1] = j;
+				int r = getRandom(0, 1);
+				if (r == 0)
+					monsterState[monsterCount] = 'l'; // go to left
+				else
+					monsterState[monsterCount] = 'r'; // go to right
+				monsterCount ++;
+			}
 			maxObjectsOnRow --;
 			board[i][j] = chosen;
 		}
@@ -548,10 +642,14 @@ void initGameState()
 	LProbBase = 2;
 	MProbBase = 1;
 
+	monsterCount = 0;
+
 	score = 1;
 	playerHeight = score;
 	playerHeightInScreen = playerHeight;
+
 	srand(time(0));
+
 	for (j = 2; j < boardRows; j ++ ) {
 		setRowObjects(j);
 	}
