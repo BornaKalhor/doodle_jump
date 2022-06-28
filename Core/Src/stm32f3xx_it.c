@@ -25,6 +25,9 @@
 #include "LiquidCrystal.h"
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
+#include <time.h>
+#include <math.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -54,6 +57,15 @@ int playerRow, playerCol;
 char playerOn;
 int jumpCount;
 
+int playerHeight;
+int playerHeightInScreen;
+int score;
+
+int BProbBase;
+int SProbBase;
+int VProbBase;
+int LProbBase;
+int MProbBase;
 
 GPIO_TypeDef *const Row_ports[] = {GPIOD, GPIOD, GPIOD, GPIOD};
 const uint16_t Row_pins[] = {GPIO_PIN_4, GPIO_PIN_5, GPIO_PIN_6, GPIO_PIN_7};
@@ -70,6 +82,9 @@ void printGame();
 void initGameState();
 void processTurn();
 void movePlayerTo(int toCol, int toRow);
+int getRandom(int lower, int upper);
+char chooseWhichObject();
+void setRowObjects(int j);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -314,8 +329,13 @@ void TIM2_IRQHandler(void)
   		  print("1 - Start   2 - About us");
   		  break;
   	  case 'g':
-  		  printGame();
   		  processTurn();
+  		  printGame();
+//  		  DEBUG scores
+//  		  char buff[20];
+//  		  sprintf(buff, "%d %d %d", score, playerHeight, playerHeightInScreen);
+//  		  sprintf(buff, "%d", getRandom(0, 9));
+//  		  print(buff);
   		  break;
   	  case 'a':
   		  clear();
@@ -331,8 +351,34 @@ void TIM2_IRQHandler(void)
 
 /* USER CODE BEGIN 1 */
 
+int getRandom(int lower, int upper)
+{
+
+	int num = (rand() %
+	   (upper - lower + 1)) + lower;
+    return num;
+}
+
 void processTurn()
 {
+	int i, j;
+
+	// Shift screen to down
+	if (playerHeightInScreen > 12) {
+		playerHeightInScreen --;
+		playerRow --;
+		for (j = 0; j < boardRows - 1; j ++ ) {
+			// replace row[j] with row[j + 1]
+			for (i = 0; i < boardColumns; i ++ ) {
+				board[i][j] = board[i][j + 1];
+			}
+		}
+		for (i = 0; i < boardColumns; i ++ ) {
+			board[i][boardRows - 1] = 'e';
+		}
+		setRowObjects(boardRows - 1);
+	}
+
 	if (playerRow == 0) {
 
 	} else if (jumpCount == 0 && playerRow > 0) { // Jump rule
@@ -356,6 +402,15 @@ void processTurn()
 
 void movePlayerTo(int toCol, int toRow)
 {
+	if (playerRow < toRow) {
+		playerHeight ++;
+		playerHeightInScreen ++;
+		if (playerHeight > score)
+			score = playerHeight;
+	} else if (playerRow > toRow) {
+		playerHeight --;
+		playerHeightInScreen --;
+	}
 	board[playerCol][playerRow] = playerOn;
 	playerCol = toCol;
 	playerRow = toRow;
@@ -396,8 +451,82 @@ void printGame()
 	}
 }
 
+char chooseWhichObject()
+{
+	/*
+	 * board
+	 * 	'e': empty
+	 * 	'b': simple block
+	 * 	's': spoil or coil block
+	 * 	'v': void
+	 *  'l': loose block
+	 *  'm': monster
+	 *  '!': null and not valid
+	 */
+
+	int BProb = BProbBase + BProbBase / (sqrt(score)); // as score goes high it will be so hard
+	if (getRandom(0, 100) < BProb) {
+		return 'b';
+	}
+
+	int SProb = SProbBase + SProbBase / (sqrt(score)); // as score goes high it will be so hard
+	if (getRandom(0, 100) < SProb) {
+		return 's';
+	}
+
+	if (score > 20) {
+		int MProb = MProbBase + MProbBase / (sqrt(score)); // as score goes high it will be so hard
+		if (getRandom(0, 100) < MProb) {
+			return 'm';
+		}
+	}
+
+	int LProb = LProbBase + LProbBase / (sqrt(score)); // as score goes high it will be so hard
+	if (getRandom(0, 100) < LProb) {
+		return 'l';
+	}
+
+	if (score > 20) {
+		int VProb = VProbBase + VProbBase / (sqrt(score)); // as score goes high it will be so hard
+		if (getRandom(0, 100) < VProb) {
+			return 'v';
+		}
+	}
+
+	return 'e';
+}
+
+void setRowObjects(int j)
+{
+	/*
+	 * how to generage a row in this game?
+	 * choose witch character should be choosed for this row
+	 * choose witch col to place it
+	 */
+	int i;
+	int maxObjectsOnRow = 2;
+	for (i = 0; i < boardColumns; i ++ ) {
+		char chosen = chooseWhichObject();
+		if (chosen != 'e') {
+			maxObjectsOnRow --;
+			board[i][j] = chosen;
+		}
+		if (maxObjectsOnRow < 1) break;
+	}
+}
+
 void initGameState()
 {
+	/*
+	 * board
+	 * 	'e': empty
+	 * 	'b': simple block
+	 * 	's': spoil or coil block
+	 * 	'v': void
+	 *  'l': loose block
+	 *  'm': monster
+	 *  '!': null and not valid
+	 */
 	int i, j;
 	for (i = 0; i < boardColumns; i ++) {
 		for (j = 0; j < boardRows; j ++) {
@@ -412,6 +541,20 @@ void initGameState()
 	playerCol = 1;
 	playerOn = 'e';
 	jumpCount = 0;
+
+	BProbBase = 10;
+	SProbBase = 1;
+	VProbBase = 1;
+	LProbBase = 2;
+	MProbBase = 1;
+
+	score = 1;
+	playerHeight = score;
+	playerHeightInScreen = playerHeight;
+	srand(time(0));
+	for (j = 2; j < boardRows; j ++ ) {
+		setRowObjects(j);
+	}
 }
 
 void keypadCallback(int8_t column_number)

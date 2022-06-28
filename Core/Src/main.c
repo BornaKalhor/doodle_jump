@@ -68,6 +68,12 @@ static void MX_TIM2_Init(void);
 /* USER CODE BEGIN 0 */
 
 void init_state_vars() {
+    /*
+     * menusState:
+     * 	'z' init page
+     * 	'g' game page
+     * 	'a' about us
+     * */
 	menuState = 'z';
 }
 
