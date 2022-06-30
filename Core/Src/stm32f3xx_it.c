@@ -68,6 +68,8 @@ int VProbBase;
 int LProbBase;
 int MProbBase;
 
+int voidCount;
+
 int monsterCount;
 int monsterLoc[50][2];
 char monsterState[50];
@@ -394,6 +396,8 @@ void processTurn()
 					monsterState[i] = monsterState[i + 1];
 				}
 				monsterCount --;
+			} else if (board[i][0] == 'v') {
+				voidCount --;
 			}
 		}
 		for (i = 0; i < monsterCount; i ++ ) {
@@ -549,7 +553,7 @@ char chooseWhichObject()
 		return 's';
 	}
 
-	if (score > 20) {
+	if (score > 20 && monsterCount < 5) {
 		int MProb = MProbBase + MProbBase * (sqrt(score)); // as score goes high it will be so hard
 		if (MProb > 2 * MProbBase)
 			MProb = 2 * MProbBase;
@@ -568,7 +572,7 @@ char chooseWhichObject()
 		return 'l';
 	}
 
-	if (score > 20) {
+	if (score > 20 && voidCount < 5) {
 		int VProb = VProbBase + VProbBase * (sqrt(score)); // as score goes high it will be so hard
 		if (VProb > 2 * VProbBase)
 			VProb = 2 * VProb;
@@ -601,6 +605,8 @@ void setRowObjects(int j)
 				else
 					monsterState[monsterCount] = 'r'; // go to right
 				monsterCount ++;
+			} else if (chosen == 'v') {
+				voidCount ++;
 			}
 			maxObjectsOnRow --;
 			board[i][j] = chosen;
@@ -643,6 +649,7 @@ void initGameState()
 	MProbBase = 1;
 
 	monsterCount = 0;
+	voidCount = 0;
 
 	score = 1;
 	playerHeight = score;
@@ -715,35 +722,35 @@ void keypadCallback(int8_t column_number)
 //    	  print("3");
        break;
      case 4:
-    	  print("4");
+//    	  print("4");
        break;
      case 5:
-    	  print("5");
+//    	  print("5");
        break;
      case 6:
-    	  print("6");
+//    	  print("6");
        break;
      case 7:
-    	  print("7");
+//    	  print("7");
        break;
      case 8:
-    	  print("8");
+//    	  print("8");
        break;
      case 9:
-    	  print("9");
+//    	  print("9");
        break;
      case 10:
      	 if (menuState == 'z')
      		 menuState = 'm';
        break;
      case 11:
-    	  print("11");
+//    	  print("11");
        break;
      case 12:
-    	  print("12");
+//    	  print("12");
        break;
      case 13:
-    	 print("13");
+//    	 print("13");
        break;
      case 14:
     	 if (menuState == 'm')
