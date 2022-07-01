@@ -41,6 +41,7 @@
 #define boardColumns 4
 #define jumpOnBlock 7
 #define jumpOnCoil 20
+#define maxObjects 9
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -68,11 +69,25 @@ int VProbBase;
 int LProbBase;
 int MProbBase;
 
+int lastBlockHeightInScreen;
+
 int voidCount;
+int blockCount;
+int boosterCount;
+int looseCount;
+
+int playerFalling;
+
+int pauseGame;
+
+int bulletRow, bulletCol;
 
 int monsterCount;
 int monsterLoc[50][2];
 char monsterState[50];
+
+int turn = 0;
+int D0, D1, D2, D3;
 
 GPIO_TypeDef *const Row_ports[] = {GPIOD, GPIOD, GPIOD, GPIOD};
 const uint16_t Row_pins[] = {GPIO_PIN_4, GPIO_PIN_5, GPIO_PIN_6, GPIO_PIN_7};
@@ -90,8 +105,12 @@ void initGameState();
 void processTurn();
 void movePlayerTo(int toCol, int toRow);
 int getRandom(int lower, int upper);
-char chooseWhichObject();
+char chooseWhichObject(int j);
 void setRowObjects(int j);
+void fireBullet();
+void set_seg_value(int D);
+void setScoreSeven();
+
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -101,6 +120,8 @@ void setRowObjects(int j);
 
 /* External variables --------------------------------------------------------*/
 extern TIM_HandleTypeDef htim2;
+extern TIM_HandleTypeDef htim7;
+extern UART_HandleTypeDef huart2;
 /* USER CODE BEGIN EV */
 
 /* USER CODE END EV */
@@ -314,7 +335,7 @@ void TIM2_IRQHandler(void)
   HAL_TIM_IRQHandler(&htim2);
   /* USER CODE BEGIN TIM2_IRQn 1 */
   HAL_GPIO_TogglePin(GPIOE, GPIO_PIN_9);
-
+	unsigned char buff[512] = {' '};
 //  // Update State variables
 //  print("test");
   if (menuState != 'g') { // this is game state
@@ -324,25 +345,54 @@ void TIM2_IRQHandler(void)
   }
 
   // Upload on LCD
+	unsigned char hello[64] = "\n\n\nTurn started \n";
+	HAL_UART_Transmit(&huart2, hello, sizeof(hello), 500);
   switch (menuState) {
   	  case 'z':
   		  clear();
   		  setCursor(0, 0);
   		  print("Doodle Jump");
   		  break;
+	  case 'd':
+	  	clear();
+		  setCursor(0, 0);
+		  print("You Lost ");
+		  setCursor(0, 1);
+		  sprintf(buff, " %d ", score);
+		  print(buff);
+	   	break;
   	  case 'm':
   		  clear();
   		  setCursor(0, 0);
   		  print("1 - Start   2 - About us");
   		  break;
   	  case 'g':
-  		  processTurn();
-  		  printGame();
+
+		sprintf(buff, "DEBUG: \n ph:%d, phscreen:%d sc:%d \n", playerHeight, playerHeightInScreen, score);
+		HAL_UART_Transmit(&huart2, buff, sizeof(buff), 500);
+		sprintf(buff, "DEBUG: \n bl:%d, ls:%d, vd:%d, ms:%d, bs:%d \n",
+			blockCount, looseCount, voidCount, monsterCount, boosterCount);
+		HAL_UART_Transmit(&huart2, buff, sizeof(buff), 500);
+		if (!pauseGame)
+			processTurn();
+		printGame();
 //  		  DEBUG scores
 //  		  char buff[20];
 //  		  sprintf(buff, "%d %d %d", score, playerHeight, playerHeightInScreen);
 //  		  sprintf(buff, "%d", getRandom(0, 9));
 //  		  print(buff);
+  		  int pc = 0;
+  		  int i, j;
+  		  for (i = 0; i < boardColumns; i ++) {
+  			  for (j = 0;j < boardRows; j ++ ) {
+  				  if (board[i][j] == 'p')
+  					  pc ++;
+  			  }
+  		  }
+  		  if (pc > 1) {
+				unsigned char hello[64] = "******* HOLY SHIT \n";
+  			  HAL_UART_Transmit(&huart2, hello, sizeof(hello), 500);
+  		  }
   		  break;
   	  case 'a':
   		  clear();
@@ -356,6 +406,68 @@ void TIM2_IRQHandler(void)
   /* USER CODE END TIM2_IRQn 1 */
 }
 
+/**
+  * @brief This function handles USART2 global interrupt / USART2 wake-up interrupt through EXTI line 26.
+  */
+void USART2_IRQHandler(void)
+{
+  /* USER CODE BEGIN USART2_IRQn 0 */
+
+  /* USER CODE END USART2_IRQn 0 */
+  HAL_UART_IRQHandler(&huart2);
+  /* USER CODE BEGIN USART2_IRQn 1 */
+
+  /* USER CODE END USART2_IRQn 1 */
+}
+
+/**
+  * @brief This function handles TIM7 global interrupt.
+  */
+void TIM7_IRQHandler(void)
+{
+  /* USER CODE BEGIN TIM7_IRQn 0 */
+
+  /* USER CODE END TIM7_IRQn 0 */
+  HAL_TIM_IRQHandler(&htim7);
+  /* USER CODE BEGIN TIM7_IRQn 1 */
+  HAL_GPIO_TogglePin(GPIOE, GPIO_PIN_14);
+//  turn = 2;
+  setScoreSeven();
+
+  if (turn % 4 == 0) {
+	  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_11, 1);
+	  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_12, 0);
+	  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_13, 0);
+	  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_10, 0);
+//		  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_15, 1);
+	  set_seg_value(D0);
+  } else if (turn % 4 == 1) {
+	  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_11, 0);
+	  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_12, 1);
+	  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_13, 0);
+	  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_10, 0);
+//		  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_15, 0);
+	  set_seg_value(D1);
+  } else if (turn % 4 == 2) {
+	  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_11, 0);
+	  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_12, 0);
+	  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_13, 1);
+	  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_10, 0);
+//	      HAL_GPIO_WritePin(GPIOB, GPIO_PIN_15, 1);
+	  set_seg_value(D2);
+  } else if (turn % 4 == 3) {
+	  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_11, 0);
+	  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_12, 0);
+	  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_13, 0);
+	  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_10, 1);
+//		  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_15, 1);
+	  set_seg_value(D3);
+  }
+
+  turn = (turn + 1) % 4;
+  /* USER CODE END TIM7_IRQn 1 */
+}
+
 /* USER CODE BEGIN 1 */
 
 int getRandom(int lower, int upper)
@@ -364,6 +476,14 @@ int getRandom(int lower, int upper)
 	int num = (rand() %
 	   (upper - lower + 1)) + lower;
     return num;
+}
+
+void fireBullet() {
+	if (playerFalling || board[playerCol][playerRow + 1] != 'e' || bulletCol != -1)
+		return;
+	bulletCol = playerCol;
+	bulletRow = playerRow + 1;
+	board[bulletCol][bulletRow] = '^';
 }
 
 void processTurn()
@@ -381,29 +501,44 @@ void processTurn()
 	 */
 	// Shift screen to down
 	if (playerHeightInScreen > 12) {
+	    // unsigned char hello[64] = "SHIFT DOWN \n";
+		// HAL_UART_Transmit(&huart2, hello, sizeof(hello), 500);
 		playerHeightInScreen --;
 		playerRow --;
+		lastBlockHeightInScreen --;
+		bulletRow --;
 
 		// delete old monsters states
+		// unsigned char hello3[64] = "SHIFTING MONSTERS \n";
+		// HAL_UART_Transmit(&huart2, hello3, sizeof(hello3), 500);
 		for (i = 0; i < boardColumns; i ++) {
 			if (board[i][0] == 'm') {
 				// shift monster array to left
-				for (i = 0; i < monsterCount - 1; i ++ ) {
-					monsterLoc[i][0] = monsterLoc[i + 1][0];
-					monsterLoc[i][1] = monsterLoc[i + 1][1];
+				// unsigned char hello5[64] = "SHIFTING MONSTERS \n";
+				// HAL_UART_Transmit(&huart2, hello5, sizeof(hello5), 500);
+				for (j = 0; j < monsterCount - 1; j ++ ) {
+					monsterLoc[j][0] = monsterLoc[j + 1][0];
+					monsterLoc[j][1] = monsterLoc[j + 1][1];
 				}
-				for (i = 0; i < monsterCount - 1; i ++ ) {
-					monsterState[i] = monsterState[i + 1];
+				for (j = 0; j < monsterCount - 1; j ++ ) {
+					monsterState[j] = monsterState[j + 1];
 				}
 				monsterCount --;
 			} else if (board[i][0] == 'v') {
 				voidCount --;
+			} else if (board[i][0] == 'b') {
+				blockCount --;
+			} else if (board[i][0] == 's') {
+				boosterCount --;
+			} else if (board[i][0] == 'l') {
+				looseCount --;
 			}
 		}
 		for (i = 0; i < monsterCount; i ++ ) {
 			monsterLoc[i][1] --;
 		}
-
+		// 		unsigned char hello4[64] = "SHIFTING BOARD DOWN \n";
+		// HAL_UART_Transmit(&huart2, hello4, sizeof(hello4), 500);
 		for (j = 0; j < boardRows - 1; j ++ ) {
 			// replace row[j] with row[j + 1]
 			for (i = 0; i < boardColumns; i ++ ) {
@@ -413,26 +548,56 @@ void processTurn()
 		for (i = 0; i < boardColumns; i ++ ) {
 			board[i][boardRows - 1] = 'e';
 		}
+		// unsigned char hello2[64] = "Selecting new objects \n";
+		// HAL_UART_Transmit(&huart2, hello2, sizeof(hello2), 500);
 		setRowObjects(boardRows - 1);
+		// unsigned char hello1[64] = "Selected objects for new row \n";
+		// HAL_UART_Transmit(&huart2, hello1, sizeof(hello1), 500);
 	}
+
 	// Void
-	if (board[playerCol][playerRow] == 'v') {
-		// Die
+	if (playerRow > 0 && playerOn == 'v') {
+		playerFalling = 1;
 	}
 	// Loose Block
-	if (playerRow > 0 && board[playerCol][playerRow - 1] == 'l') {
+	if (playerRow > 0 && board[playerCol][playerRow - 1] == 'l' && jumpCount < 1) {
 		board[playerCol][playerRow - 1] = 'e';
 	}
 
 	// Monster
-	if (playerRow > 0 && board[playerCol][playerRow] == 'm') {
-		// Die
+	if (playerRow > 0 && playerOn == 'm') {
+		playerFalling = 1;
 	}
 
-    // Move monsters
+	// Move bullet
+	if (bulletCol != -1 && board[bulletCol][bulletRow + 1] == 'e') {
+		board[bulletCol][bulletRow] = 'e';
+		bulletRow ++;
+		board[bulletCol][bulletRow] = '*';
+	} else if (bulletCol != -1 && board[bulletCol][bulletRow + 1] != 'e') {
+		board[bulletCol][bulletRow] = 'e';
+		if (board[bulletCol][bulletRow + 1] == 'm') {
+			for (i = 0; i < monsterCount; i ++) {
+				if (monsterLoc[i][0] == bulletCol && monsterLoc[i][1] == bulletRow + 1) {
+					for (j = i; j < monsterCount - 1; j ++ ) {
+						monsterLoc[j][0] = monsterLoc[j + 1][0];
+						monsterLoc[j][1] = monsterLoc[j + 1][1];
+					}
+					for (j = i; j < monsterCount - 1; j ++ ) {
+						monsterState[j] = monsterState[j + 1];
+					}
+					monsterCount --;
+					break;
+				}
+			}
+			board[bulletCol][bulletRow + 1] = 'e';
+		}
+		bulletCol = -1;
+		bulletRow = -1;
+	}
+
+	// Move monsters
 	for (i = 0; i < monsterCount; i ++ ) {
-		if (i ==0)
-			HAL_GPIO_TogglePin(GPIOE, GPIO_PIN_11);
 		if (monsterState[i] == 'l') {
 			if (monsterLoc[i][0] > 0 && board[monsterLoc[i][0] - 1][monsterLoc[i][1]] == 'e') {
 				board[monsterLoc[i][0] - 1][monsterLoc[i][1]] = 'm';
@@ -456,9 +621,14 @@ void processTurn()
     //	Jump and Gravity
 	if (playerRow == 0) {
 		// Die
+		menuState = 'd';
+	} else if (playerFalling) {
+		movePlayerTo(playerCol, playerRow - 1);
 	} else if (jumpCount == 0 && playerRow > 0) { // Jump rule
 		// Gravity rule
-		if (board[playerCol][playerRow - 1] == 'e') {
+		if (board[playerCol][playerRow - 1] == 'e' ||
+			board[playerCol][playerRow - 1] == 'm' ||
+			board[playerCol][playerRow - 1] == 'v') {
 			movePlayerTo(playerCol, playerRow - 1);
 		}
 
@@ -467,7 +637,7 @@ void processTurn()
 			jumpCount = jumpOnBlock;
 		}
 
-		if (board[playerCol][playerRow - 1] == 's') { // Jump on simple block
+		if (board[playerCol][playerRow - 1] == 's') { // Jump on coil block
 			jumpCount = jumpOnCoil;
 		}
 
@@ -490,7 +660,8 @@ void movePlayerTo(int toCol, int toRow)
 		playerHeight --;
 		playerHeightInScreen --;
 	}
-	board[playerCol][playerRow] = playerOn;
+	if (playerOn != 'm')
+		board[playerCol][playerRow] = playerOn;
 	playerCol = toCol;
 	playerRow = toRow;
 	playerOn = board[playerCol][playerRow];
@@ -516,10 +687,28 @@ void printGame()
 				tmp[0] = board[i][j];
 				tmp[1] = '\0';
 				  switch (board[i][j])
-				     {
-				     case 'e':
-				    	print(" ");
-				       break;
+					{
+					case 'p':
+						write(0);
+						break;
+					case 'e':
+						print(" ");
+				       	break;
+					case 'b':
+						write(1);
+						break;
+					case 'm':
+						write(2);
+						break;
+					case 's':
+						write(3);
+						break;
+					case 'v':
+						write(4);
+						break;
+					case 'l':
+						write(5);
+						break;
 				     default:
 				    	 print(tmp);
 				       break;
@@ -530,7 +719,7 @@ void printGame()
 	}
 }
 
-char chooseWhichObject()
+char chooseWhichObject(int j)
 {
 	/*
 	 * board
@@ -543,28 +732,25 @@ char chooseWhichObject()
 	 *  '!': null and not valid
 	 */
 
+	if (j - lastBlockHeightInScreen > 4) {
+		lastBlockHeightInScreen = j;
+		return 'b';		
+	}
+
+	if (blockCount + looseCount + voidCount + monsterCount + boosterCount > maxObjects)
+		return 'e';
+
 	int BProb = BProbBase + BProbBase / (sqrt(score)); // as score goes high it will be so hard
 	if (getRandom(0, 100) < BProb) {
+		lastBlockHeightInScreen = j;
 		return 'b';
 	}
+
+//	return 'e';
 
 	int SProb = SProbBase + SProbBase / (sqrt(score)); // as score goes high it will be so hard
 	if (getRandom(0, 100) < SProb) {
 		return 's';
-	}
-
-	if (score > 20 && monsterCount < 5) {
-		int MProb = MProbBase + MProbBase * (sqrt(score)); // as score goes high it will be so hard
-		if (MProb > 2 * MProbBase)
-			MProb = 2 * MProbBase;
-		int t = getRandom(0, 100);
-
-		if (t < MProb) {
-			  char buff[20];
-			  sprintf(buff, "%d", t);
-			  print(buff);
-			return 'm';
-		}
 	}
 
 	int LProb = LProbBase + LProbBase / (sqrt(score)); // as score goes high it will be so hard
@@ -572,7 +758,22 @@ char chooseWhichObject()
 		return 'l';
 	}
 
-	if (score > 20 && voidCount < 5) {
+	if (score > 20 && monsterCount < 4) {
+		int MProb = MProbBase + MProbBase * (sqrt(score)); // as score goes high it will be so hard
+		if (MProb > 2 * MProbBase)
+			MProb = 2 * MProbBase;
+		int t = getRandom(0, 100);
+
+		if (t < MProb) {
+//			  char buff[20];
+//			  sprintf(buff, "%d", t);
+//			  print(buff);
+			return 'm';
+		}
+	}
+
+
+	if (score > 20 && voidCount < 4) {
 		int VProb = VProbBase + VProbBase * (sqrt(score)); // as score goes high it will be so hard
 		if (VProb > 2 * VProbBase)
 			VProb = 2 * VProb;
@@ -594,7 +795,7 @@ void setRowObjects(int j)
 	int i;
 	int maxObjectsOnRow = 2;
 	for (i = 0; i < boardColumns; i ++ ) {
-		char chosen = chooseWhichObject();
+		char chosen = chooseWhichObject(j);
 		if (chosen != 'e') {
 			if (chosen == 'm') {
 				monsterLoc[monsterCount][0] = i;
@@ -607,6 +808,12 @@ void setRowObjects(int j)
 				monsterCount ++;
 			} else if (chosen == 'v') {
 				voidCount ++;
+			} else if (chosen == 'b') {
+				blockCount ++;
+			} else if (chosen == 's') {
+				boosterCount ++;
+			} else if (chosen == 'l') {
+				looseCount ++;
 			}
 			maxObjectsOnRow --;
 			board[i][j] = chosen;
@@ -631,16 +838,22 @@ void initGameState()
 	for (i = 0; i < boardColumns; i ++) {
 		for (j = 0; j < boardRows; j ++) {
 			board[i][j] = 'e';
+			boardTemp[i][j] = '!'; // this means it is the first turn and no value is there
 		}
 		board[i][boardRows] = '\0';
-		boardTemp[i][j] = '!'; // this means it is the first turn and no value is there
 	}
 	board[1][0] = 'b';
+	lastBlockHeightInScreen = 0;
 	board[1][1] = 'p';
 	playerRow = 1;
 	playerCol = 1;
 	playerOn = 'e';
 	jumpCount = 0;
+
+	bulletRow = -1;
+	bulletCol = -1;
+
+	pauseGame = 0;
 
 	BProbBase = 10;
 	SProbBase = 1;
@@ -650,6 +863,11 @@ void initGameState()
 
 	monsterCount = 0;
 	voidCount = 0;
+	blockCount = 1;
+	boosterCount = 0;
+	looseCount = 0;
+
+	playerFalling = 0;
 
 	score = 1;
 	playerHeight = score;
@@ -737,6 +955,10 @@ void keypadCallback(int8_t column_number)
 //    	  print("8");
        break;
      case 9:
+	 	if (pauseGame) 
+		 	pauseGame = 0;
+		else 
+			pauseGame = 1;
 //    	  print("9");
        break;
      case 10:
@@ -745,6 +967,7 @@ void keypadCallback(int8_t column_number)
        break;
      case 11:
 //    	  print("11");
+		fireBullet();
        break;
      case 12:
 //    	  print("12");
@@ -755,7 +978,7 @@ void keypadCallback(int8_t column_number)
      case 14:
     	 if (menuState == 'm')
     		 menuState = 'a';
-    	 else if (menuState == 'g') {
+    	 else if (menuState == 'g' && !playerFalling) {
     		 //    		 Player move right
 			 movePlayerTo((playerCol + 1) % boardColumns, playerRow);
     	 }
@@ -764,7 +987,7 @@ void keypadCallback(int8_t column_number)
     	 if (menuState == 'm') {
     		 initGameState();
     		 menuState = 'g';
-    	 } else if (menuState == 'g') {
+    	 } else if (menuState == 'g' && !playerFalling) {
     		 //    		 Move player left
 			 if (playerCol == 0) {
 				 movePlayerTo(boardColumns - 1, playerRow);
@@ -776,11 +999,74 @@ void keypadCallback(int8_t column_number)
      case 16:
     	  if (menuState == 'a')
     		  menuState = 'm';
+			else if (menuState == 'd')
+				menuState = 'm';
        break;
 
      default:
        break;
      }
+}
+
+
+void set_seg_value(int D) {
+	if (D == 0) {
+	  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_0, 0);
+	  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_1, 0);
+	  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_2, 0);
+	  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_3, 0);
+	} else if (D == 1) {
+	  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_0, 1);
+	  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_1, 0);
+	  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_2, 0);
+	  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_3, 0);
+	} else if (D == 2) {
+	  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_0, 0);
+	  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_1, 1);
+	  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_2, 0);
+	  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_3, 0);
+	} else if (D == 3) {
+	  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_0, 1);
+	  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_1, 1);
+	  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_2, 0);
+	  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_3, 0);
+	} else if(D == 4) {
+	  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_0, 0);
+	  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_1, 0);
+	  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_2, 1);
+	  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_3, 0);
+	} else if(D == 5) {
+	  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_0, 1);
+	  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_1, 0);
+	  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_2, 1);
+	  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_3, 0);
+	} else if(D == 6) {
+	  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_0, 0);
+	  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_1, 1);
+	  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_2, 1);
+	  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_3, 0);
+	} else if(D == 7) {
+	  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_0, 1);
+	  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_1, 1);
+	  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_2, 1);
+	  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_3, 0);
+	} else if(D == 8) {
+	  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_0, 0);
+	  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_1, 0);
+	  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_2, 0);
+	  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_3, 1);
+	} else if(D == 9) {
+	  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_0, 1);
+	  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_1, 0);
+	  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_2, 0);
+	  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_3, 1);
+	}
+}
+
+void setScoreSeven() {
+	D3 = score % 10;
+	D2 = (score / 10) % 10;
+	D1 = (score / 100) % 10;
 }
 
 /* USER CODE END 1 */
