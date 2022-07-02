@@ -89,6 +89,14 @@ char monsterState[50];
 int turn = 0;
 int D0, D1, D2, D3;
 
+int v, vol;
+int degree;
+
+
+
+
+unsigned char showarr[30] = {' '};
+
 GPIO_TypeDef *const Row_ports[] = {GPIOD, GPIOD, GPIOD, GPIOD};
 const uint16_t Row_pins[] = {GPIO_PIN_4, GPIO_PIN_5, GPIO_PIN_6, GPIO_PIN_7};
 GPIO_TypeDef *const Column_ports[] = {GPIOD, GPIOD, GPIOD, GPIOD};
@@ -111,6 +119,8 @@ void fireBullet();
 void set_seg_value(int D);
 void setScoreSeven();
 
+void show(int i);
+
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -119,7 +129,9 @@ void setScoreSeven();
 /* USER CODE END 0 */
 
 /* External variables --------------------------------------------------------*/
+extern ADC_HandleTypeDef hadc4;
 extern TIM_HandleTypeDef htim2;
+extern TIM_HandleTypeDef htim3;
 extern TIM_HandleTypeDef htim7;
 extern UART_HandleTypeDef huart2;
 /* USER CODE BEGIN EV */
@@ -346,7 +358,7 @@ void TIM2_IRQHandler(void)
 
   // Upload on LCD
 	unsigned char hello[64] = "\n\n\nTurn started \n";
-	HAL_UART_Transmit(&huart2, hello, sizeof(hello), 500);
+/*	HAL_UART_Transmit(&huart2, hello, sizeof(hello), 500);							*/
   switch (menuState) {
   	  case 'z':
   		  clear();
@@ -369,10 +381,10 @@ void TIM2_IRQHandler(void)
   	  case 'g':
 
 		sprintf(buff, "DEBUG: \n ph:%d, phscreen:%d sc:%d \n", playerHeight, playerHeightInScreen, score);
-		HAL_UART_Transmit(&huart2, buff, sizeof(buff), 500);
+/*		HAL_UART_Transmit(&huart2, buff, sizeof(buff), 500);							*/
 		sprintf(buff, "DEBUG: \n bl:%d, ls:%d, vd:%d, ms:%d, bs:%d \n",
 			blockCount, looseCount, voidCount, monsterCount, boosterCount);
-		HAL_UART_Transmit(&huart2, buff, sizeof(buff), 500);
+/*		HAL_UART_Transmit(&huart2, buff, sizeof(buff), 500);							*/
 		if (!pauseGame)
 			processTurn();
 		printGame();
@@ -391,7 +403,7 @@ void TIM2_IRQHandler(void)
   		  }
   		  if (pc > 1) {
 				unsigned char hello[64] = "******* HOLY SHIT \n";
-  			  HAL_UART_Transmit(&huart2, hello, sizeof(hello), 500);
+/*  			  HAL_UART_Transmit(&huart2, hello, sizeof(hello), 500);					*/
   		  }
   		  break;
   	  case 'a':
@@ -403,7 +415,48 @@ void TIM2_IRQHandler(void)
 
   // Delay for better visual
   HAL_Delay(1);
+
+  v=HAL_ADC_GetValue(&hadc4);
+  degree = ((((((v)*200)/(4095))*50) +50) / 100) - 9;
+//  degree = (((v)*30)/(4095))*50+500;
+  //int step = degree / 50;
+
+  if(degree < 0) degree = 0;
+  if(degree > 9) degree = 9;
+  show(degree);
+
+//  HAL_GPIO_TogglePin(GPIOE, GPIO_PIN_14);
+
+//  HAL_Delay(200);
+  HAL_ADC_Start_IT(&hadc4);
+
+
   /* USER CODE END TIM2_IRQn 1 */
+}
+
+/**
+  * @brief This function handles TIM3 global interrupt.
+  */
+void TIM3_IRQHandler(void)
+{
+  /* USER CODE BEGIN TIM3_IRQn 0 */
+
+  /* USER CODE END TIM3_IRQn 0 */
+  HAL_TIM_IRQHandler(&htim3);
+  /* USER CODE BEGIN TIM3_IRQn 1 */
+
+//  v=HAL_ADC_GetValue(&hadc4);
+//  degree = (((v)*10)/(4095))/**50+500*/;
+//
+//  show(degree);
+//
+//  HAL_GPIO_TogglePin(GPIOE, GPIO_PIN_14);
+//
+////  HAL_Delay(200);
+//  HAL_ADC_Start_IT(&hadc4);
+//
+
+  /* USER CODE END TIM3_IRQn 1 */
 }
 
 /**
@@ -430,7 +483,7 @@ void TIM7_IRQHandler(void)
   /* USER CODE END TIM7_IRQn 0 */
   HAL_TIM_IRQHandler(&htim7);
   /* USER CODE BEGIN TIM7_IRQn 1 */
-  HAL_GPIO_TogglePin(GPIOE, GPIO_PIN_14);
+//  HAL_GPIO_TogglePin(GPIOE, GPIO_PIN_14);
 //  turn = 2;
   setScoreSeven();
 
@@ -466,6 +519,33 @@ void TIM7_IRQHandler(void)
 
   turn = (turn + 1) % 4;
   /* USER CODE END TIM7_IRQn 1 */
+}
+
+/**
+  * @brief This function handles ADC4 interrupt.
+  */
+void ADC4_IRQHandler(void)
+{
+  /* USER CODE BEGIN ADC4_IRQn 0 */
+
+  /* USER CODE END ADC4_IRQn 0 */
+  HAL_ADC_IRQHandler(&hadc4);
+  /* USER CODE BEGIN ADC4_IRQn 1 */
+//  HAL_ADC_Start_IT(&hadc4);
+  /* USER CODE END ADC4_IRQn 1 */
+}
+
+/**
+  * @brief This function handles Floating point unit interrupt.
+  */
+void FPU_IRQHandler(void)
+{
+  /* USER CODE BEGIN FPU_IRQn 0 */
+
+  /* USER CODE END FPU_IRQn 0 */
+  /* USER CODE BEGIN FPU_IRQn 1 */
+
+  /* USER CODE END FPU_IRQn 1 */
 }
 
 /* USER CODE BEGIN 1 */
@@ -1069,5 +1149,13 @@ void setScoreSeven() {
 	D1 = (score / 100) % 10;
 }
 
+
+void show(int i){
+	int show = sprintf(showarr, "difficulty %d \n", i);
+	HAL_UART_Transmit(&huart2, showarr, sizeof(showarr), 1000);
+	D0 = i;
+
+
+}
 /* USER CODE END 1 */
 
