@@ -121,6 +121,8 @@ void setScoreSeven();
 
 void show(int i);
 
+void buzz();
+
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -417,12 +419,12 @@ void TIM2_IRQHandler(void)
   HAL_Delay(1);
 
   v=HAL_ADC_GetValue(&hadc4);
-  degree = ((((((v)*200)/(4095))*50) +50) / 100) - 9;
+  degree = ((((((v)*200)/(4095))*50) +50) / 100) / 11;
 //  degree = (((v)*30)/(4095))*50+500;
   //int step = degree / 50;
 
-  if(degree < 0) degree = 0;
-  if(degree > 9) degree = 9;
+  //if(degree < 0) degree = 0;
+  //if(degree > 9) degree = 9;
   show(degree);
 
 //  HAL_GPIO_TogglePin(GPIOE, GPIO_PIN_14);
@@ -702,6 +704,7 @@ void processTurn()
 
 		if (board[playerCol][playerRow - 1] == 'b') { // Jump on simple block
 			jumpCount = jumpOnBlock;
+			buzz();
 		}
 
 		if (board[playerCol][playerRow - 1] == 's') { // Jump on coil block
@@ -1143,6 +1146,16 @@ void show(int i){
 	D0 = i;
 
 
+}
+
+
+void buzz(){
+	int i;
+	for(i = 0 ; i <= 100 ; i++){
+		__HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_1, i);
+	}
+	__HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_1, 0);
+	return;
 }
 /* USER CODE END 1 */
 

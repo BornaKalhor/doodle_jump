@@ -296,8 +296,8 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-	//  __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_1, i);
-	  HAL_Delay(10);
+//	  __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_1, i);
+	  HAL_Delay(100);
 
 	  i = (i+1) % 100;
 
