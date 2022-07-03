@@ -41,7 +41,7 @@
 #define boardColumns 4
 #define jumpOnBlock 7
 #define jumpOnCoil 20
-#define maxObjects 9
+#define maxObjects 14
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -92,8 +92,14 @@ int D0, D1, D2, D3;
 int v, vol;
 int degree;
 
+int buzzLen;
+
+RTC_TimeTypeDef mytime;
 
 
+
+char timeStr[20] = {' '};
+char dateStr[20] = {' '};
 
 unsigned char showarr[30] = {' '};
 
@@ -121,7 +127,7 @@ void setScoreSeven();
 
 void show(int i);
 
-void buzz();
+void buzz(int len);
 
 /* USER CODE END PFP */
 
@@ -134,6 +140,7 @@ void buzz();
 extern ADC_HandleTypeDef hadc4;
 extern TIM_HandleTypeDef htim2;
 extern TIM_HandleTypeDef htim3;
+extern TIM_HandleTypeDef htim6;
 extern TIM_HandleTypeDef htim7;
 extern UART_HandleTypeDef huart2;
 /* USER CODE BEGIN EV */
@@ -352,11 +359,11 @@ void TIM2_IRQHandler(void)
 	unsigned char buff[512] = {' '};
 //  // Update State variables
 //  print("test");
-  if (menuState != 'g') { // this is game state
-	  initGameState();
-	  menuState = 'g';
-
-  }
+//  if (menuState != 'g') { // this is game state
+//	  initGameState();
+//	  menuState = 'g';
+//
+//  }
 
   // Upload on LCD
 	unsigned char hello[64] = "\n\n\nTurn started \n";
@@ -433,6 +440,9 @@ void TIM2_IRQHandler(void)
   HAL_ADC_Start_IT(&hadc4);
 
 
+
+
+
   /* USER CODE END TIM2_IRQn 1 */
 }
 
@@ -473,6 +483,22 @@ void USART2_IRQHandler(void)
   /* USER CODE BEGIN USART2_IRQn 1 */
 
   /* USER CODE END USART2_IRQn 1 */
+}
+
+/**
+  * @brief This function handles Timer 6 interrupt and DAC underrun interrupts.
+  */
+void TIM6_DAC_IRQHandler(void)
+{
+  /* USER CODE BEGIN TIM6_DAC_IRQn 0 */
+
+  /* USER CODE END TIM6_DAC_IRQn 0 */
+  HAL_TIM_IRQHandler(&htim6);
+  /* USER CODE BEGIN TIM6_DAC_IRQn 1 */
+  	  if (buzzLen > 0)
+  		  	 buzzLen --;
+	__HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_1, buzzLen % 100);
+  /* USER CODE END TIM6_DAC_IRQn 1 */
 }
 
 /**
@@ -550,9 +576,10 @@ int getRandom(int lower, int upper)
 void fireBullet() {
 	if (playerFalling || board[playerCol][playerRow + 1] != 'e' || bulletCol != -1)
 		return;
+	buzz(50);
 	bulletCol = playerCol;
 	bulletRow = playerRow + 1;
-	board[bulletCol][bulletRow] = '^';
+	board[bulletCol][bulletRow] = '*';
 }
 
 void processTurn()
@@ -659,6 +686,7 @@ void processTurn()
 					break;
 				}
 			}
+			buzz(250);
 			board[bulletCol][bulletRow + 1] = 'e';
 		}
 		bulletCol = -1;
@@ -692,6 +720,7 @@ void processTurn()
 		// Die
 		menuState = 'd';
 	} else if (playerFalling) {
+		buzz(500);
 		movePlayerTo(playerCol, playerRow - 1);
 	} else if (jumpCount == 0 && playerRow > 0) { // Jump rule
 		// Gravity rule
@@ -704,11 +733,12 @@ void processTurn()
 
 		if (board[playerCol][playerRow - 1] == 'b') { // Jump on simple block
 			jumpCount = jumpOnBlock;
-			buzz();
+			buzz(100);
 		}
 
 		if (board[playerCol][playerRow - 1] == 's') { // Jump on coil block
 			jumpCount = jumpOnCoil;
+			buzz(140);
 		}
 
 	} else if (jumpCount > 0) { // Go up rule
@@ -807,7 +837,7 @@ char chooseWhichObject(int j)
 		return 'b';		
 	}
 
-	if (blockCount + looseCount + voidCount + monsterCount + boosterCount > maxObjects)
+	if (blockCount + looseCount + voidCount + monsterCount + boosterCount > maxObjects + degree)
 		return 'e';
 
 	int BProb = BProbBase + BProbBase / (sqrt(score)); // as score goes high it will be so hard
@@ -834,7 +864,7 @@ char chooseWhichObject(int j)
 			MProb = 2 * MProbBase;
 		int t = getRandom(0, 100);
 
-		if (t < MProb) {
+		if (t < MProb + degree) {
 //			  char buff[20];
 //			  sprintf(buff, "%d", t);
 //			  print(buff);
@@ -843,11 +873,11 @@ char chooseWhichObject(int j)
 	}
 
 
-	if (score > 20 && voidCount < 4) {
+	if (score > 20 && voidCount < 3) {
 		int VProb = VProbBase + VProbBase * (sqrt(score)); // as score goes high it will be so hard
 		if (VProb > 2 * VProbBase)
 			VProb = 2 * VProb;
-		if (getRandom(0, 100) < VProb) {
+		if (getRandom(0, 100) < VProb + degree) {
 			return 'v';
 		}
 	}
@@ -930,6 +960,8 @@ void initGameState()
 	VProbBase = 1;
 	LProbBase = 2;
 	MProbBase = 1;
+
+	buzzLen = 0;
 
 	monsterCount = 0;
 	voidCount = 0;
@@ -1149,12 +1181,11 @@ void show(int i){
 }
 
 
-void buzz(){
-	int i;
-	for(i = 0 ; i <= 100 ; i++){
-		__HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_1, i);
-	}
-	__HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_1, 0);
+void buzz(int len){
+//	int i;
+	buzzLen = len;
+
+//	__HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_1, 0);
 	return;
 }
 /* USER CODE END 1 */

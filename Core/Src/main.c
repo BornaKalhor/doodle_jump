@@ -49,6 +49,7 @@ SPI_HandleTypeDef hspi1;
 
 TIM_HandleTypeDef htim2;
 TIM_HandleTypeDef htim3;
+TIM_HandleTypeDef htim6;
 TIM_HandleTypeDef htim7;
 
 UART_HandleTypeDef huart2;
@@ -73,6 +74,7 @@ static void MX_TIM7_Init(void);
 static void MX_ADC4_Init(void);
 static void MX_TIM3_Init(void);
 static void MX_RTC_Init(void);
+static void MX_TIM6_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -230,6 +232,7 @@ int main(void)
   MX_ADC4_Init();
   MX_TIM3_Init();
   MX_RTC_Init();
+  MX_TIM6_Init();
   /* USER CODE BEGIN 2 */
 
   HAL_ADC_Start_IT(&hadc4);
@@ -244,14 +247,15 @@ int main(void)
   unsigned char hello[8] = "hello \n";
   HAL_UART_Transmit(&huart2, hello, sizeof(hello), 500);
   HAL_TIM_Base_Start_IT(&htim2);
+  HAL_TIM_Base_Start_IT(&htim6);
   HAL_TIM_Base_Start_IT(&htim3);
   HAL_TIM_Base_Start_IT(&htim7);
 
 
   RTC_TimeTypeDef mytime;
-  mytime.Hours = 6;
-  mytime.Minutes = 23;
-  mytime.Seconds = 20;
+  mytime.Hours = 8;
+  mytime.Minutes = 50;
+  mytime.Seconds = 10;
 
   HAL_RTC_SetTime(&hrtc, &mytime, RTC_FORMAT_BIN);
 
@@ -259,20 +263,20 @@ int main(void)
   RTC_DateTypeDef mydate;
   mydate.Year = 22;
   mydate.Month = 7;
-  mydate.Date = 2;
+  mydate.Date = 3;
 
   HAL_RTC_SetDate(&hrtc, &mydate, RTC_FORMAT_BIN);
 
 
-  char timeStr[20];
-  char dateStr[20];
+  char timeStr[20] = {' '};
+  char dateStr[20] = {' '};
 
-  HAL_RTC_GetTime(&hrtc, &mytime, RTC_FORMAT_BIN);
-  HAL_RTC_GetDate(&hrtc, &mydate, RTC_FORMAT_BIN);
-
-
-  sprintf(timeStr, "%2d:%2d:%2d", mytime.Hours, mytime.Minutes, mytime.Seconds);
-  sprintf(dateStr, "%d //%d // %d", mytime.Hours, mytime.Minutes, mytime.Seconds);
+//  HAL_RTC_GetTime(&hrtc, &mytime, RTC_FORMAT_BIN);
+//  HAL_RTC_GetDate(&hrtc, &mydate, RTC_FORMAT_BIN);
+//
+//
+//  sprintf(timeStr, "\n %2d:%2d:%2d \n", mytime.Hours, mytime.Minutes, mytime.Seconds);
+//  sprintf(dateStr, "\n %d//%d//%d \n", mydate.Year, mydate.Month, mydate.Date);
 
 
   /* USER CODE END 2 */
@@ -287,11 +291,14 @@ int main(void)
 	  HAL_RTC_GetDate(&hrtc, &mydate, RTC_FORMAT_BIN);
 
 
-	  sprintf(timeStr, "%2d:%2d:%2d", mytime.Hours, mytime.Minutes, mytime.Seconds);
-	  sprintf(dateStr, "%d//%d//%d", mytime.Hours, mytime.Minutes, mytime.Seconds);
+	  sprintf(timeStr, "\t\t %2d:%2d:%2d\n", mytime.Hours, mytime.Minutes, mytime.Seconds);
+	  sprintf(dateStr, "\t\t %d//%d//%d\n", mydate.Year, mydate.Month, mydate.Date);
+
+	  HAL_UART_Transmit(&huart2, dateStr, sizeof(dateStr), 1000);
+	  HAL_UART_Transmit(&huart2, timeStr, sizeof(timeStr), 1000);
 
 
-	 // HAL_Delay(100);
+	  HAL_Delay(1000);
 
     /* USER CODE END WHILE */
 
@@ -299,7 +306,7 @@ int main(void)
 //	  __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_1, i);
 	  HAL_Delay(100);
 
-	  i = (i+1) % 100;
+//	  i = (i+1) % 100;
 
 //	  HAL_GPIO_TogglePin(GPIOE, GPIO_PIN_10);
 //	  HAL_Delay(1);
@@ -665,6 +672,44 @@ static void MX_TIM3_Init(void)
 
   /* USER CODE END TIM3_Init 2 */
   HAL_TIM_MspPostInit(&htim3);
+
+}
+
+/**
+  * @brief TIM6 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM6_Init(void)
+{
+
+  /* USER CODE BEGIN TIM6_Init 0 */
+
+  /* USER CODE END TIM6_Init 0 */
+
+  TIM_MasterConfigTypeDef sMasterConfig = {0};
+
+  /* USER CODE BEGIN TIM6_Init 1 */
+
+  /* USER CODE END TIM6_Init 1 */
+  htim6.Instance = TIM6;
+  htim6.Init.Prescaler = 4799;
+  htim6.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim6.Init.Period = 10;
+  htim6.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  if (HAL_TIM_Base_Init(&htim6) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
+  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+  if (HAL_TIMEx_MasterConfigSynchronization(&htim6, &sMasterConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM6_Init 2 */
+
+  /* USER CODE END TIM6_Init 2 */
 
 }
 
