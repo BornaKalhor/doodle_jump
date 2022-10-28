@@ -60,6 +60,11 @@ void EXTI1_IRQHandler(void);
 void EXTI2_TSC_IRQHandler(void);
 void EXTI3_IRQHandler(void);
 void TIM2_IRQHandler(void);
+void TIM3_IRQHandler(void);
+void USART2_IRQHandler(void);
+void TIM6_DAC_IRQHandler(void);
+void TIM7_IRQHandler(void);
+void ADC4_IRQHandler(void);
 /* USER CODE BEGIN EFP */
 
 /* USER CODE END EFP */
