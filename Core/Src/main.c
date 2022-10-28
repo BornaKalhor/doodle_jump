@@ -83,18 +83,6 @@ static void MX_TIM6_Init(void);
 /* USER CODE BEGIN 0 */
 
 
-
-typedef unsigned char byte;
-
-byte doodler[] = {
-  0x0E,
-  0x1E,
-  0x1B,
-  0x1F,
-  0x1E,
-  0x1E,
-  0x1E,
-  0x0A
 };
 
 
@@ -156,6 +144,7 @@ byte broken_step[] = {
   0x03,
   0x03
 };
+
 
 void init_state_vars() {
     /*
